@@ -1,0 +1,96 @@
+name: Feature Request
+description: Suggest a new feature or improvement for goodtribes.org
+title: "[Feature] "
+labels: ["feature-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest a feature! Please fill in as much detail as you can.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Feature Summary
+      description: A short, clear title for the feature you're requesting.
+      placeholder: e.g. "Add dark mode support"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Motivation
+      description: What problem does this feature solve? Who would benefit?
+      placeholder: |
+        As a [type of user], I want [goal] so that [reason].
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the feature you'd like to see. Be as specific as possible.
+      placeholder: e.g. "A toggle in the user settings that switches between light and dark themes..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any workarounds or alternative solutions?
+      placeholder: e.g. "I've tried using browser extensions but they don't cover all pages."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Low — nice to have
+        - Medium — would improve my workflow
+        - High — blocking or critical
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area / Component
+      description: Which part of the product does this relate to?
+      options:
+        - UI / Design
+        - Content / CMS
+        - Search
+        - Authentication
+        - Notifications
+        - Integrations
+        - Performance
+        - Accessibility
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: How will we know when this feature is done? List measurable conditions.
+      placeholder: |
+        - [ ] User can toggle dark mode from the profile settings
+        - [ ] Preference is persisted across sessions
+        - [ ] All existing pages render correctly in dark mode
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Screenshots, mockups, links, or any other helpful context.
+    validations:
+      required: false
