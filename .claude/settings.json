@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(gh auth *)",
+      "Bash(gh api *)",
+      "Bash(gh repo *)",
+      "Bash(gh secret *)",
+      "Bash(helm lint *)",
+      "Bash(helm template *)"
+    ]
+  }
+}

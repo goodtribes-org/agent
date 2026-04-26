@@ -1,0 +1,8 @@
+# Independent project repos — keep them out of this repo
+asylguiden.se/
+kickfix/
+goodtribes.org/
+design/
+
+# Machine-specific Claude Code settings (absolute paths, personal permissions)
+.claude/settings.local.json
