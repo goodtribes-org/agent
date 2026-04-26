@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kickfix
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:goodtribes-org/deploy.git
+    targetRevision: HEAD
+    path: kickfix
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kickfix
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

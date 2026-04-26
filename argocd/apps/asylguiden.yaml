@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: asylguiden
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:goodtribes-org/deploy.git
+    targetRevision: HEAD
+    path: asylguiden
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: asylguiden
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
