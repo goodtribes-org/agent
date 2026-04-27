@@ -16,6 +16,15 @@ Each project has its own `docker-compose.yml` and deploys independently via GitH
 
 ---
 
+## Cluster / Kubernetes
+
+- **Kubeconfig**: `~/.kube/confighrb` — always use `--kubeconfig ~/.kube/confighrb` (the default `~/.kube/config` points to a different cluster)
+- **Namespaces**: `kickfix`, `asylguiden`, `goodtribes`
+- **Pull secret**: `ghcr-pull-secret` (kubernetes.io/dockerconfigjson) deployed in all three namespaces for pulling from `ghcr.io`
+- **Recreate pull secrets**: `GHCR_USERNAME=x GHCR_TOKEN=y ./argocd/create-pull-secrets.sh`
+
+---
+
 ## Kickfix
 
 Swedish job marketplace for posting/accepting freelance gigs with in-app messaging and payment tracking. See `kickfix/CLAUDE.md` for full details.
