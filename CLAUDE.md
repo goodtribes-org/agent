@@ -14,6 +14,41 @@ This is a monorepo containing two independent web applications and a placeholder
 
 Each project has its own `docker-compose.yml` and deploys independently via GitHub Actions → ghcr.io → GitOps manifest repo.
 
+> **Note:** This local directory (`~/projects/goodtribes.org/`) is the `goodtribes-org/agent` GitHub repo — not `goodtribes-org/goodtribes.org`. The git remote points to `git@github.com:goodtribes-org/agent.git`.
+
+---
+
+## GitHub Projects & AI workflow
+
+Three project boards under the goodtribes-org org, one per project:
+
+| Board | Number | URL |
+|-------|--------|-----|
+| goodtribes.org | #2 | https://github.com/orgs/goodtribes-org/projects/2 |
+| kickfix | #3 | https://github.com/orgs/goodtribes-org/projects/3 |
+| asylguiden.se | #4 | https://github.com/orgs/goodtribes-org/projects/4 |
+
+All boards share the same 6-stage status workflow: `new → request → plan → review → apply → test`
+
+### Agent commands (`.claude/commands/`)
+
+| Command | What it does |
+|---------|-------------|
+| `/gh-start` | Launches `/gh-request` and `/gh-plan` as parallel background workers covering all three boards |
+| `/gh-request` | Polls `new` issues → validates scope/stack/sensitive data → posts outline → moves to `request` |
+| `/gh-plan` | Polls `plan` issues → reads codebase → writes file-level implementation plan → moves to `review` |
+| `/gh-intake` | One-shot: claims next unclaimed issue from the board matching the current repo, chains to `/gh-request` |
+
+### Starting the workers
+
+Run from this directory in Claude Code:
+
+```
+/gh-start
+```
+
+Human checkpoints: move card `request → plan` to approve an outline; move `review → apply` to approve a plan. Workers never cross these transitions automatically.
+
 ---
 
 ## Cluster / Kubernetes
