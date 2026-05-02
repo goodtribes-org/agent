@@ -34,9 +34,10 @@ All boards share the same 6-stage status workflow: `new → request → plan →
 
 | Command | What it does |
 |---------|-------------|
-| `/gh-start` | Launches `/gh-request` and `/gh-plan` as parallel background workers covering all three boards |
+| `/gh-start` | Launches `/gh-request`, `/gh-plan`, and `/gh-apply` as parallel background workers covering all three boards |
 | `/gh-request` | Polls `new` issues → validates scope/stack/sensitive data → posts outline → moves to `request` |
 | `/gh-plan` | Polls `plan` issues → reads codebase → writes file-level implementation plan → moves to `review` |
+| `/gh-apply` | Polls `apply` issues → reads plan comment → creates feature branch → implements changes → opens PR → moves to `test` |
 | `/gh-intake` | One-shot: claims next unclaimed issue from the board matching the current repo, chains to `/gh-request` |
 
 ### Starting the workers
@@ -48,6 +49,8 @@ Run from this directory in Claude Code:
 ```
 
 Human checkpoints: move card `request → plan` to approve an outline; move `review → apply` to approve a plan. Workers never cross these transitions automatically.
+
+`/gh-apply` opens a pull request on the `goodtribes-org` org repo and moves the card to `test`. Review and merge the PR manually.
 
 ---
 
