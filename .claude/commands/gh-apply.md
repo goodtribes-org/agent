@@ -46,7 +46,15 @@ For **each** project number collected in step 0, run:
 gh project item-list <number> --owner goodtribes-org --format json --limit 100
 ```
 
-Collect all items where `status` equals `apply` (case-insensitive) across all boards. Pick the first item that has no assignee, or the first item overall if all are assigned.
+Collect all items where `status` equals `apply` (case-insensitive) across all boards.
+
+For each candidate item (prefer unassigned first), fetch its issue labels:
+
+```bash
+gh issue view <content.number> --repo <content.repository> --json labels --jq '.labels[].name'
+```
+
+Skip the item if any label name starts with `picked-by-`. Pick the first item that passes this check.
 
 Note the item's:
 - `id` — project item node ID (starts with `PVTI_`)
@@ -54,13 +62,27 @@ Note the item's:
 - `content.repository` — the repo the issue lives in (e.g. `goodtribes-org/kickfix`)
 - `projectNumber` and `projectNodeId` — the board this item came from (needed for step 13)
 
-**If no items in 'apply' status on any board:**
+**If no items in 'apply' status on any board, OR all candidates have a `picked-by-*` label:**
 
 ```bash
 echo "No issues in apply — sleeping 5 minutes..." && sleep 300
 ```
 
 Then go back to step 1 (do not re-run step 0).
+
+### 1.5. Claim the issue with a picked-by label
+
+Get the local hostname and immediately label the issue to prevent other agents from picking it up:
+
+```bash
+PICKED_LABEL="picked-by-$(hostname)"
+gh label create "$PICKED_LABEL" --repo <issueRepo> --color "f9a825" --force
+gh issue edit <issueNumber> --repo <issueRepo> --add-label "$PICKED_LABEL"
+```
+
+Report: "Claimed issue #<issueNumber> with label `$PICKED_LABEL`."
+
+Store `$PICKED_LABEL` — you will need it when removing the label in step 14.
 
 ### 2. Discover Status field IDs
 
@@ -395,7 +417,7 @@ gh project item-edit \
 
 ```bash
 gh label create "test" --repo <issueRepo> --color "0e8a16" --force
-gh issue edit <issueNumber> --repo <issueRepo> --remove-label "apply" --add-label "test"
+gh issue edit <issueNumber> --repo <issueRepo> --remove-label "apply" --remove-label "$PICKED_LABEL" --add-label "test"
 ```
 
 Do not stop if label update fails — report a warning and continue.

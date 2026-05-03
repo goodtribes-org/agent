@@ -54,7 +54,15 @@ For **each** project number collected in step 1, run:
 gh project item-list <number> --owner <owner> --format json --limit 100
 ```
 
-Collect all items where `status` equals `new` (case-insensitive) across all boards. Pick the first item with no assignee, or the first item overall.
+Collect all items where `status` equals `new` (case-insensitive) across all boards.
+
+For each candidate item (prefer unassigned first), fetch its issue labels:
+
+```bash
+gh issue view <content.number> --repo <content.repository> --json labels --jq '.labels[].name'
+```
+
+Skip the item if any label name starts with `picked-by-`. Pick the first item that passes this check.
 
 Note the item's:
 - `id` — project item node ID (starts with `PVTI_`)
@@ -62,13 +70,27 @@ Note the item's:
 - `content.repository` — repo the issue lives in (e.g. `goodtribes-org/kickfix`)
 - `projectNumber` and `projectNodeId` — the board this item came from (needed for step 5)
 
-**If no items in 'new' status on any board:**
+**If no items in 'new' status on any board, OR all candidates have a `picked-by-*` label:**
 
 ```bash
 echo "No new issues — sleeping 5 minutes..." && sleep 300
 ```
 
 Then go back to step 2 (do not re-run steps 0–1).
+
+### 2.5. Claim the issue with a picked-by label
+
+Get the local hostname and immediately label the issue to prevent other agents from picking it up:
+
+```bash
+PICKED_LABEL="picked-by-$(hostname)"
+gh label create "$PICKED_LABEL" --repo <issueRepo> --color "f9a825" --force
+gh issue edit <issueNumber> --repo <issueRepo> --add-label "$PICKED_LABEL"
+```
+
+Report: "Claimed issue #<issueNumber> with label `$PICKED_LABEL`."
+
+Store `$PICKED_LABEL` — you will need it when removing the label in step 7.
 
 ### 3. Read the issue
 
@@ -171,7 +193,7 @@ Report: "Could not identify sub-project — card returned to new." and stop.
 ```bash
 gh label create "<subProject>" --repo <issueRepo> --color "0075ca" --force
 gh label create "request" --repo <issueRepo> --color "e4e669" --force
-gh issue edit <issueNumber> --repo <issueRepo> --add-label "<subProject>,request"
+gh issue edit <issueNumber> --repo <issueRepo> --add-label "<subProject>,request" --remove-label "$PICKED_LABEL"
 ```
 
 Do not stop if label creation fails — report a warning and continue.

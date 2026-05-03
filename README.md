@@ -265,6 +265,18 @@ Workers can move cards backwards automatically in two cases:
 
 Check the issue comments to see why — there will always be an explanation.
 
+### Multi-machine collision prevention
+
+When multiple machines run `/gh-start` at the same time, workers use a `picked-by-<hostname>` GitHub label as a soft lock so two agents never work the same ticket.
+
+**How it works:**
+
+1. Before claiming a ticket, the worker checks its labels. Any issue already carrying a `picked-by-*` label is skipped.
+2. Immediately after selecting an issue, the worker adds `picked-by-<your-hostname>` (amber colour) to the issue.
+3. When the worker finishes and transitions the card to the next stage, the `picked-by-*` label is removed.
+
+**Side benefit:** The label history on each issue shows which machine worked on it and when. If a worker crashes mid-flight the label stays visible so you can see the stuck ticket and clear it manually by removing the label.
+
 ---
 
 ## How to write a good issue
