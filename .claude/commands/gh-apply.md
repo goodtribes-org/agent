@@ -22,7 +22,7 @@ Issues arrive in 'apply' after a human moves the card from 'review → apply', s
 
 ## Workflow
 
-Step 0 runs **once** at startup. Steps 1–15 repeat in a loop until interrupted.
+Steps 0 and 0.5 run **once** at startup. Steps 1–15 repeat in a loop until interrupted.
 
 ### 0. Find all project boards
 
@@ -33,6 +33,105 @@ gh project list --owner goodtribes-org --format json --limit 50
 Collect ALL projects returned. Note each project's `number` and `id` (node ID starting with `PVT_`). There is no title filter — all org projects are processed.
 
 If no projects found — report "No GitHub Project boards found" and stop entirely.
+
+---
+
+### 0.5. Verify local repo setup (runs once at startup)
+
+Check that all three sub-project repositories are cloned locally and have the correct git remotes. Run these checks for each sub-project in this order:
+
+| Sub-project | Directory | Remote | Expected URL |
+|---|---|---|---|
+| `kickfix` | `kickfix/` | `goodtribes` | `git@github.com:goodtribes-org/kickfix.git` |
+| `asylguiden.se` | `asylguiden.se/` | `goodtribes` | `git@github.com:goodtribes-org/asylguiden.se.git` |
+| `goodtribes.org` | `goodtribes.org/` | `origin` | `git@github.com:goodtribes-org/goodtribes.org.git` |
+
+**Check A — Directory exists:**
+
+```bash
+ls /home/mattias/projects/goodtribes.org/<subdir>/
+```
+
+If the directory is missing, clone it automatically (no confirmation needed — cloning is always safe):
+
+```bash
+git clone git@github.com:goodtribes-org/<repoName>.git /home/mattias/projects/goodtribes.org/<subdir>
+```
+
+For `kickfix` and `asylguiden.se` only, rename the default `origin` remote to `goodtribes`:
+
+```bash
+git -C /home/mattias/projects/goodtribes.org/<subdir> remote rename origin goodtribes
+```
+
+For `goodtribes.org`, keep `origin` as-is.
+
+If `git clone` fails, pause and ask the user via `AskUserQuestion`:
+
+```
+Sub-project setup problem: <name>
+Issue: clone failed
+
+Error: <full error output>
+
+Options:
+  A) Retry the clone (fix SSH/network first, then select A)
+  B) Skip this sub-project for this session (issues labelled '<name>' will be rejected at step 5)
+  C) Stop the worker entirely
+```
+
+Wait for the user's response. If A: retry the clone. If B: mark sub-project as unavailable in session memory and continue to the next sub-project. If C: stop entirely.
+
+**Check B — Is a git repo:**
+
+```bash
+git -C /home/mattias/projects/goodtribes.org/<subdir> rev-parse --git-dir 2>&1
+```
+
+If this fails (directory exists but is not a git repository), ask the user via `AskUserQuestion` — do not auto-fix:
+
+```
+Sub-project setup problem: <name>
+Issue: directory exists at <subdir> but is not a git repository
+
+Error: <command output>
+
+Options:
+  A) Skip this sub-project for this session
+  B) Stop the worker entirely
+```
+
+**Check C — Remote name and URL correct:**
+
+```bash
+git -C /home/mattias/projects/goodtribes.org/<subdir> remote get-url <remoteName> 2>&1
+```
+
+If the remote doesn't exist or points to the wrong URL, ask the user via `AskUserQuestion` and offer to fix:
+
+```
+Sub-project setup problem: <name>
+Issue: <remote '<remoteName>' not found | remote '<remoteName>' points to '<actualUrl>' instead of '<expectedUrl>'>
+
+Options:
+  A) Fix automatically (run: git remote <add|set-url> <remoteName> <expectedUrl>)
+  B) Skip this sub-project for this session
+  C) Stop the worker entirely
+```
+
+If A: run the appropriate fix command, then re-run Check C. If it still fails, ask again with the new error output.
+
+Fix commands:
+- Remote missing: `git -C <subdir> remote add <remoteName> <expectedUrl>`
+- Remote wrong URL: `git -C <subdir> remote set-url <remoteName> <expectedUrl>`
+
+**After all checks pass for all three sub-projects**, report:
+
+```
+Pre-flight OK: kickfix ✓  asylguiden.se ✓  goodtribes.org ✓
+```
+
+Then proceed to the loop.
 
 ---
 
@@ -166,20 +265,14 @@ gh project item-edit \
 
 Report: "Issue #<issueNumber> has no plan comment — returned to review." and go back to step 1.
 
-### 5. Validate the sub-project label
+### 5. Validate the sub-project label and local repo
 
 Check the issue labels for exactly one of these values:
 - `kickfix`
 - `asylguiden.se`
 - `goodtribes.org`
 
-Then verify the directory exists in the monorepo:
-
-```bash
-ls /home/mattias/projects/goodtribes.org/<label>/
-```
-
-**If no valid label is present, OR the directory does not exist:**
+**If no valid label is present:**
 
 Write the rejection to a temp file and post it:
 
@@ -213,7 +306,37 @@ gh project item-edit \
 
 Report: "Issue #<issueNumber> has no valid sub-project label — returned to review." and go back to step 1.
 
-**If valid:** note `<subProject>` (the label value) and continue.
+**If valid**, note `<subProject>` (the label value). Then verify the directory exists:
+
+```bash
+ls /home/mattias/projects/goodtribes.org/<label>/
+```
+
+If the directory is missing, attempt to clone it (same process as step 0.5 Check A):
+
+```bash
+git clone git@github.com:goodtribes-org/<repoName>.git /home/mattias/projects/goodtribes.org/<subdir>
+# For kickfix and asylguiden.se only:
+git -C /home/mattias/projects/goodtribes.org/<subdir> remote rename origin goodtribes
+```
+
+If clone fails, pause and ask the user via `AskUserQuestion`:
+
+```
+Cannot clone <repoName> to process issue #<issueNumber>.
+
+Clone failed with:
+<full error output>
+
+Options:
+  A) Retry the clone
+  B) Skip this issue (card returns to 'review')
+  C) Stop the worker entirely
+```
+
+If B: move the card to `review`, remove the `$PICKED_LABEL` label, and go back to step 1. If C: stop entirely.
+
+Continue once the directory is confirmed to exist.
 
 ### 6. Resolve the target repo and git remote
 
@@ -264,7 +387,21 @@ If it does not exist, create it off `<pushRemote>/main`:
 git -C <subProjectDir> checkout -b feat/issue-<issueNumber>-<slug> <pushRemote>/main
 ```
 
-**If the checkout or create fails** — report the full git error output, do NOT move the card, and go back to step 1.
+**If the checkout or create fails** — pause and ask the user via `AskUserQuestion`:
+
+```
+Branch setup failed for issue #<issueNumber> in <subProjectDir>.
+
+Command: git checkout [-b] feat/issue-<issueNumber>-<slug> [<pushRemote>/main]
+Error: <full git error output>
+
+Options:
+  A) Retry the branch setup
+  B) Skip this issue (card → 'review', picked-by label removed)
+  C) Stop the worker entirely
+```
+
+If A: retry the git checkout/create command. If B: move card to `review`, remove `$PICKED_LABEL` label, go back to step 1. If C: stop entirely.
 
 Report: "Branch `feat/issue-<issueNumber>-<slug>` ready in `<subProjectDir>`."
 
@@ -325,9 +462,25 @@ git -C <subProjectDir> commit -m "feat: <issueTitle> (closes #<issueNumber>)"
 git -C <subProjectDir> push <pushRemote> feat/issue-<issueNumber>-<slug>
 ```
 
-**If the push fails** — report the full error, do NOT move the card, and go back to step 1.
+Do NOT force push under any circumstances.
 
-Do NOT force push under any circumstances. If a non-fast-forward error occurs, report it and stop — a human must resolve the conflict.
+**If the push fails** — pause and ask the user via `AskUserQuestion`:
+
+```
+Push failed for issue #<issueNumber>.
+
+Command: git push <pushRemote> feat/issue-<issueNumber>-<slug>
+Error: <full error output>
+
+Note: force push is not allowed. A non-fast-forward error must be resolved manually before retrying.
+
+Options:
+  A) Retry the push (after resolving any upstream conflicts)
+  B) Skip this issue (branch left as-is, card → 'review', picked-by removed)
+  C) Stop the worker entirely
+```
+
+If A: retry the push command. If B: post a GitHub comment on the issue noting the pushed branch name, move card to `review`, remove `$PICKED_LABEL` label, go back to step 1. Do NOT delete the branch. If C: stop entirely.
 
 ### 11. Create pull request
 
@@ -378,7 +531,24 @@ rm /tmp/gh-apply-pr.md
 
 Capture the PR URL from the command output.
 
-**If PR creation fails** — report the full error. Do NOT delete the temp file (leave it for debugging). Do NOT move the card. Go back to step 1.
+**If PR creation fails** — do NOT delete the temp file. Pause and ask the user via `AskUserQuestion`:
+
+```
+PR creation failed for issue #<issueNumber>.
+
+The branch was pushed successfully to <ghRepo>.
+The PR body is saved at /tmp/gh-apply-pr.md.
+
+Error: <full error output>
+
+Options:
+  A) Retry PR creation
+  B) Provide the PR URL manually (the PR may already exist — enter the URL and I'll complete steps 12–15)
+  C) Skip this issue (card → 'review', branch left pushed, picked-by removed)
+  D) Stop the worker entirely
+```
+
+If A: retry `gh pr create`. If B: user provides a PR URL → use it for steps 12–15 and complete the normal flow. If C: post a GitHub comment on the issue noting the pushed branch name, move card to `review`, remove `$PICKED_LABEL` label, go back to step 1. If D: stop entirely.
 
 ### 12. Post PR link as issue comment
 
@@ -449,3 +619,5 @@ Go back to step 1 immediately to check for the next issue.
 - Label colors: `test` → `0e8a16` (green, signals ready for QA).
 - The `goodtribes.org` sub-project uses `origin` as its push remote (no `goodtribes` remote configured yet). All other sub-projects use the `goodtribes` remote.
 - Processes ALL project boards under goodtribes-org (goodtribes.org #2, kickfix #3, asylguiden.se #4). No title filter. Field and option IDs are discovered dynamically per board in step 2.
+- Step 0.5 verifies all three sub-repos at startup. Missing repos are cloned automatically; git/remote issues prompt `AskUserQuestion` before any config change is made.
+- Blocking failures in steps 7, 10, and 11 pause the worker via `AskUserQuestion`. Skipped issues always have their `picked-by` label removed and card returned to `review`.

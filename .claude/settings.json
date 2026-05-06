@@ -6,8 +6,20 @@
       "Bash(gh api *)",
       "Bash(gh repo *)",
       "Bash(gh secret *)",
+      "Bash(gh project *)",
+      "Bash(gh issue *)",
+      "Bash(gh label *)",
+      "Bash(gh pr *)",
       "Bash(helm lint *)",
-      "Bash(helm template *)"
+      "Bash(helm template *)",
+      "Bash(ls *)",
+      "Bash(ls)",
+      "Bash(cat *)",
+      "Bash(rm *)",
+      "Bash(echo *)",
+      "Bash(sleep *)",
+      "Bash(python3 *)",
+      "Write(/tmp/*)"
     ]
   }
 }
