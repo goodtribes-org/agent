@@ -18,6 +18,45 @@ Each project has its own `docker-compose.yml` and deploys independently via GitH
 
 ---
 
+## Working guidelines (all projects)
+
+These rules apply to every project in this monorepo (`kickfix/`,
+`asylguiden.se/`, `goodtribes.org/`) and override default behavior.
+
+### Make small, incremental changes
+- Prefer the smallest change that satisfies the request. Ship one focused change
+  at a time rather than large multi-concern edits.
+
+### Infrastructure changes require explicit approval — STOP and ask
+- Adding or changing infrastructure is **out of scope for autonomous work**.
+  This includes: adding a new service (e.g. a messages/queue service), adding or
+  swapping a database, adding a cache, changing docker-compose service topology,
+  adding volumes, or introducing a new deployment/Helm component.
+- If a request implies any of the above, **stop and say: "This is an
+  infrastructure change and needs to be validated as a larger plan"** and ask
+  the user for explicit permission before writing any code.
+
+### Never touch cluster networking
+- **Do not add or change any URL/hostname, and do not edit the cluster
+  ingress** (Traefik routes, Helm ingress values, ArgoCD/manifest ingress).
+  These are off-limits — surface the need to the user/ops instead.
+
+### Way of working after every change
+1. **Validate the Docker build** — run the project's Docker build to confirm it
+   still builds (`docker compose build` / `docker compose up --build` in the
+   relevant project dir). Do not proceed if the build fails.
+2. **Commit and push.**
+3. **Wait for the pipeline to complete** — watch the GitHub Actions run for that
+   project through to a result before moving on.
+
+### If the pipeline or deployment fails — call ops, do not self-fix
+- The developer has **no access to the Kubernetes cluster** and cannot make
+  changes there. If the deploy workflow or the cluster rollout fails, **do not
+  attempt to fix the cluster, kubeconfig, manifests, or ingress yourself.**
+- Report the failure and **call ops** (the human) to resolve it.
+
+---
+
 ## GitHub Projects & AI workflow
 
 Three project boards under the goodtribes-org org, one per project:
