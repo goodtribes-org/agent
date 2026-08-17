@@ -7,11 +7,12 @@ image:
   # The tag is always the commit sha, set by CI — never "latest", because then
   # nobody knows what is actually running.
   tag: latest
-  # Empty renders no imagePullSecrets at all, which is what a public package
-  # wants. The package is made public by the build workflow. If you ever make
-  # it private again, add `organizzer` to the NAMESPACES array in
-  # argocd/create-pull-secrets.sh and put `- name: ghcr-pull-secret` here.
-  pullSecrets: []
+  # Every ghcr package in this org is private, so the kubelet needs a
+  # credential. Pull secrets do not cross namespaces — the organizzer
+  # namespace is in the NAMESPACES array in argocd/create-pull-secrets.sh,
+  # which is what creates this.
+  pullSecrets:
+    - name: ghcr-pull-secret
 
 github:
   org: goodtribes-org

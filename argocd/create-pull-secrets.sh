@@ -5,7 +5,7 @@ set -euo pipefail
 : "${GHCR_TOKEN:?GHCR_TOKEN is required}"
 
 SECRET_NAME="ghcr-pull-secret"
-NAMESPACES=(kickfix asylguiden goodtribes)
+NAMESPACES=(kickfix asylguiden goodtribes organizzer)
 
 echo "=== Creating GHCR pull secret in all namespaces ==="
 for ns in "${NAMESPACES[@]}"; do

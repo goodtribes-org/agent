@@ -272,8 +272,10 @@ GitOps, the same path every other goodtribes project takes. Two workflows in the
 repo root drive it:
 
 1. **Organizzer Docker Publish** vets, tests, builds and pushes
-   `ghcr.io/goodtribes-org/agent/organizzer:<sha>`, then makes the package
-   public so the cluster needs no pull secret.
+   `ghcr.io/goodtribes-org/agent/organizzer:<sha>`. The package is private,
+   like every other one in this org, so the `organizzer` namespace needs
+   `ghcr-pull-secret` — `../argocd/create-pull-secrets.sh` creates it there
+   along with the three product namespaces.
 2. **Organizzer Deploy To Production** renders this chart with that sha and
    commits `organizzer/organizzer.yaml` to `goodtribes-org/deploy`, where the
    `organizzer` ArgoCD Application picks it up.

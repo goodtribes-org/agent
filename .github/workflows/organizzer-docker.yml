@@ -69,14 +69,3 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      # Public so the cluster needs no pull secret in the organizzer namespace.
-      # Same step goodtribes.org's workflow uses for its frontend package.
-      - name: Make the package public
-        if: github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api --method PATCH \
-            /orgs/goodtribes-org/packages/container/agent%2Forganizzer \
-            -f visibility=public || true
