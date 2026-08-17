@@ -1,5 +1,20 @@
-# Nothing else lives in this namespace, so this chart owns it.
+# Shared with the elino deployment of this same chart, which owns the
+# organizzer-* Deployments and the organizzer-secret. Nothing here may reuse
+# those names.
 namespace: organizzer
+
+# The app.kubernetes.io/instance label, and therefore half of every selector.
+# Must differ from elino's ("organizzer") or its Deployments adopt these pods.
+instance: organizzer-goodtribes
+
+# The Secret these workers read GITHUB_TOKEN and BERGET_API_KEY from. Named
+# apart from elino's organizzer-secret in the same namespace — sharing it would
+# point these workers at the elino-apps org with the elino token.
+secretName: goodtribes-organizzer-secret
+
+# The elino deployment already created the namespace. Rendering it here would
+# relabel someone else's resource on every apply.
+createNamespace: false
 
 image:
   repository: ghcr.io/goodtribes-org/agent/organizzer
@@ -8,11 +23,10 @@ image:
   # nobody knows what is actually running.
   tag: latest
   # Every ghcr package in this org is private, so the kubelet needs a
-  # credential. Pull secrets do not cross namespaces — the organizzer
-  # namespace is in the NAMESPACES array in argocd/create-pull-secrets.sh,
-  # which is what creates this.
+  # credential. This is the secret already present in the organizzer namespace
+  # on the v2 cluster; pull secrets do not cross namespaces.
   pullSecrets:
-    - name: ghcr-pull-secret
+    - name: ghcr-pull
 
 github:
   org: goodtribes-org
@@ -112,8 +126,7 @@ resources:
 # into the GitOps repo. The chart renders no Secret when they are blank, and
 # organizzer-secret is created once by hand:
 #
-#   kubectl --kubeconfig ~/.kube/confighrb -n organizzer \
-#     create secret generic organizzer-secret \
+#   kubectl -n organizzer create secret generic goodtribes-organizzer-secret \
 #     --from-literal=GITHUB_TOKEN=... --from-literal=BERGET_API_KEY=...
 #
 # It is safe from the ArgoCD app's prune because the app never renders it.

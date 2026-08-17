@@ -268,47 +268,68 @@ berget model-override skills together.
 
 ## Deploying
 
-GitOps, the same path every other goodtribes project takes. Two workflows in the
-repo root drive it:
+The workers run on the **v2 cluster** — the default `~/.kube/config` context
+`admin@v2cluster`, not `~/.kube/confighrb` where the three product namespaces
+live. That is where kube-foundry runs, so it is the only cluster where the
+apply stage can work.
 
-1. **Organizzer Docker Publish** vets, tests, builds and pushes
-   `ghcr.io/goodtribes-org/agent/organizzer:<sha>`. The package is private,
-   like every other one in this org, so the `organizzer` namespace needs
-   `ghcr-pull-secret` — `../argocd/create-pull-secrets.sh` creates it there
-   along with the three product namespaces.
-2. **Organizzer Deploy To Production** renders this chart with that sha and
-   commits `organizzer/organizzer.yaml` to `goodtribes-org/deploy`, where the
-   `organizzer` ArgoCD Application picks it up.
+**This chart shares the `organizzer` namespace with the elino deployment of the
+same chart.** Three things keep the two apart, and all three matter:
 
-Both are filtered to `organizzer/**`, so a commit that only touches the skills
-in `../.claude/commands/` does not redeploy the workers.
+| | elino | goodtribes |
+|---|---|---|
+| Deployments | `organizzer-<stage>` | `organizzer-<board>-<stage>` |
+| `app.kubernetes.io/instance` | `organizzer` | `organizzer-goodtribes` |
+| Secret | `organizzer-secret` | `goodtribes-organizzer-secret` |
 
-The render carries **no Secret**. Every entry under `.Values.secrets` is left
-empty and — unlike the elino original — is never passed with `--set`, because
-that would commit a GitHub PAT and a Berget key in plaintext to a public
-manifest repo. Create it once, by hand, before the first rollout:
+The instance label is the load-bearing one. Elino's selector is
+`{name, instance, component}` — a strict subset of the labels these pods carry
+— so if both rendered `instance: organizzer`, elino's `organizzer-request`
+Deployment would match these pods and the two would fight over owning them.
+It comes from `.Values.instance` rather than `.Release.Name` so that a hand-run
+`helm template` and a CI one cannot disagree.
+
+`createNamespace` is `false` for the same reason: elino created the namespace,
+and rendering it here would relabel someone else's resource on every apply.
+
+### Deploying
+
+CI builds and pushes `ghcr.io/goodtribes-org/agent/organizzer:<sha>` on every
+push to `main` that touches `organizzer/**`. The rollout itself is by hand,
+because the v2 cluster's ArgoCD reads `mattiashem/v2-k8s` and holds no
+credential for `goodtribes-org/deploy` — a manifest pushed there reaches
+nobody. `Organizzer Deploy To Production` is therefore `workflow_dispatch`
+only; it renders correctly and is ready for the day that repo is registered.
 
 ```bash
-kubectl --kubeconfig ~/.kube/confighrb -n organizzer \
-  create secret generic organizzer-secret \
-  --from-literal=GITHUB_TOKEN=ghp_... --from-literal=BERGET_API_KEY=sk-...
-```
-
-ArgoCD prunes this app, but the secret is safe: the chart never renders it, so
-it is not something the app believes it owns.
-
-To render locally exactly as CI does:
-
-```bash
-helm template organizzer chart/ --set image.tag=$(git rev-parse HEAD)
+helm template organizzer-goodtribes chart/ \
+  --set image.tag=$(git rev-parse HEAD) | kubectl apply -f -
 ```
 
 The image tag is the commit sha on purpose: `latest` means nobody can tell what
 is running.
 
+The render carries **no Secret**. Every entry under `.Values.secrets` is left
+empty and — unlike the elino original — is never passed with `--set`, because
+that would commit a GitHub PAT and a Berget key in plaintext to a public
+manifest repo. Create it once, by hand:
+
+```bash
+kubectl -n organizzer create secret generic goodtribes-organizzer-secret \
+  --from-literal=GITHUB_TOKEN=ghp_... --from-literal=BERGET_API_KEY=sk_ber_...
+```
+
+**`GITHUB_TOKEN` must be a classic PAT** with `repo` and `project`. This is not
+a preference — a fine-grained token was tried on 2026-08-17 and org ProjectsV2
+refused it outright at startup:
+
+```
+error: discover project: graphql: FORBIDDEN: Resource not accessible by personal access token
+```
+
 `llm.maxIssuesPerHour` is `10` in `values.yaml` rather than the binary's
-uncapped default — the kickfix board alone holds 94 cards, and an uncapped
-request stage works through the lot in about twenty minutes.
+uncapped default — the kickfix board alone holds ninety-odd cards, and an
+uncapped request stage works through the lot in about twenty minutes.
 
 ### Rollout order
 
@@ -317,8 +338,7 @@ a time, reading what each produces before the next:
 
 1. `request` — three pods, one per board. Read the outlines.
 2. `plan` — `--set stages.plan.enabled=true` in `values.yaml`, committed.
-3. `apply` — last, and only after ops has approved installing kube-foundry in
-   this cluster. It is the only stage that spends money outside the cluster:
+3. `apply` — last. It is the only stage that spends money outside the cluster:
    each card it takes starts a sandbox pod running a coding agent.
 
 The apply stage additionally needs `factory-creds-goodtribes` in the
@@ -329,15 +349,14 @@ The apply stage additionally needs `factory-creds-goodtribes` in the
 # picks the env name via agentAPIKeyName(), which returns ANTHROPIC_API_KEY for
 # every agent except codex. secretRef does not cross namespaces, so this must
 # live in the same namespace as the task.
-kubectl --kubeconfig ~/.kube/confighrb -n kubefoundry \
-  create secret generic factory-creds-goodtribes \
+kubectl -n kubefoundry create secret generic factory-creds-goodtribes \
   --from-literal=ANTHROPIC_API_KEY=<berget key> --from-literal=GITHUB_TOKEN=<PAT>
 ```
 
-kube-foundry is **not installed in this cluster today**. Standing it up means a
-new namespace, a `SoftwareTask` CRD, a cluster-scoped operator and sandbox pods
-that default to 2 CPU / 4Gi — an infrastructure change, which the working root's
-rules say needs explicit approval before anyone writes it.
+kube-foundry **is** running on the v2 cluster (`kube-foundry-operator` and
+`kube-foundry-webhook` in `kubefoundry`), alongside elino's
+`factory-creds-elino`. Nothing needs installing — the goodtribes credential is
+the only missing piece.
 
 
 ## Known gaps

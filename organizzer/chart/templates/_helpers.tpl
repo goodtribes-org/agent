@@ -1,13 +1,22 @@
+{{/*
+The instance label comes from a value, not .Release.Name, because this chart
+shares the organizzer namespace with the elino deployment of the same chart.
+That one's selector is {name, instance, component} — a strict subset of the
+labels these pods carry — so if both rendered instance=organizzer, elino's
+organizzer-request Deployment would match these pods and the two would fight
+over owning them. Pinning it in values keeps a hand-run `helm template` and a
+CI one agreeing, which .Release.Name does not.
+*/}}
 {{- define "organizzer.labels" -}}
 app.kubernetes.io/name: organizzer
-app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/instance: {{ .Values.instance }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
 {{- define "organizzer.selectorLabels" -}}
 app.kubernetes.io/name: organizzer
-app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/instance: {{ .Values.instance }}
 {{- end -}}
 
 {{/*

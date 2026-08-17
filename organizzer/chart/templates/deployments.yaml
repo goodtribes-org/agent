@@ -77,7 +77,7 @@ spec:
             {{- end }}
           envFrom:
             - secretRef:
-                name: organizzer-secret
+                name: {{ $.Values.secretName }}
           # There is no request traffic to serve, so readiness reports whether
           # the poll loop is still turning. A stage wedged on something it
           # cannot see stops ticking and shows up here rather than looking

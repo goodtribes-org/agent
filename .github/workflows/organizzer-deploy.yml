@@ -1,30 +1,26 @@
 name: Organizzer Deploy To Production
 
+# Manual only. The workers run on the v2 cluster, whose ArgoCD reads
+# mattiashem/v2-k8s and has no credential for goodtribes-org/deploy — so a
+# manifest pushed there reaches nobody. The rendering below is correct and
+# stays here for when that repo is registered; until then the v2 deployment is
+# applied by hand:
+#
+#   helm template organizzer-goodtribes organizzer/chart/ \
+#     --set image.tag=<sha> | kubectl apply -f -
 on:
-  workflow_run:
-    workflows: [Organizzer Docker Publish]
-    types:
-      - completed
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # head_sha is the commit that was actually built. github.sha on a
-    # workflow_run event points at the default branch tip, which is not
-    # necessarily the same commit and would tag the manifest with an image
-    # that was never pushed.
-    if: >-
-      ${{ github.event.workflow_run.conclusion == 'success'
-          && github.event.workflow_run.head_branch == 'main' }}
     permissions:
       contents: read
     env:
-      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+      DEPLOY_SHA: ${{ github.sha }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Check out Manifest
         uses: actions/checkout@v4
@@ -47,7 +43,7 @@ jobs:
               exit 1
             fi
             mkdir -p manifest/organizzer
-            helm template organizzer organizzer/chart/ \
+            helm template organizzer-goodtribes organizzer/chart/ \
               --set image.tag=${{ env.DEPLOY_SHA }} \
               > manifest/organizzer/organizzer.yaml
             cat manifest/organizzer/organizzer.yaml

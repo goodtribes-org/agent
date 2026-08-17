@@ -1,6 +1,14 @@
+{{- /*
+Off by default: this deployment shares the organizzer namespace with the elino
+one, which created it. Rendering it here would relabel someone else's namespace
+on every apply. Set createNamespace=true only when this chart is the sole
+tenant of a fresh namespace.
+*/ -}}
+{{- if .Values.createNamespace }}
 apiVersion: v1
 kind: Namespace
 metadata:
   name: {{ .Values.namespace }}
   labels:
     {{- include "organizzer.labels" . | nindent 4 }}
+{{- end }}
