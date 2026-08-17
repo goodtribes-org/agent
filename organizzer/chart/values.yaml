@@ -53,11 +53,15 @@ boards:
 # All are deliberately replicas: 1 — the card's status is the lock, and a
 # second replica in a stage would double-post and double-spend.
 #
-# Roll out in this order: request alone first, read the outlines it writes,
-# then plan. apply stays off until kube-foundry exists in this cluster and ops
-# has approved it — it is the only stage that spends money outside this
-# cluster, since each card it takes starts a sandbox pod running a coding
-# agent.
+# Rolled out one at a time. request first, then apply; plan is still off until
+# its outlines have been read, and there is no hurry because the 26 cards in
+# review on board 4 were already planned by the slash-command workers.
+#
+# apply is the only stage that spends money outside this cluster — each card it
+# takes starts a sandbox pod running a coding agent, which pushes a branch and
+# opens a pull request. It is safe to have enabled because the apply column
+# only fills when a human approves review -> apply, and llm.maxIssuesPerHour
+# caps the rate at ten.
 stages:
   request:
     enabled: true
@@ -66,7 +70,7 @@ stages:
     enabled: false
     model: zai-org/GLM-5.2
   apply:
-    enabled: false
+    enabled: true
     model: ""
 
 llm:
