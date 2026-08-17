@@ -1,0 +1,66 @@
+name: Organizzer Deploy To Production
+
+on:
+  workflow_run:
+    workflows: [Organizzer Docker Publish]
+    types:
+      - completed
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # head_sha is the commit that was actually built. github.sha on a
+    # workflow_run event points at the default branch tip, which is not
+    # necessarily the same commit and would tag the manifest with an image
+    # that was never pushed.
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success'
+          && github.event.workflow_run.head_branch == 'main' }}
+    permissions:
+      contents: read
+    env:
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Check out Manifest
+        uses: actions/checkout@v4
+        with:
+          repository: goodtribes-org/deploy
+          ref: main
+          path: manifest
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+
+      # No --set secrets.* here on purpose. organizzer-secret holds a GitHub
+      # PAT and a Berget key; rendering them would commit both in plaintext to
+      # a public manifest repo. The chart renders no Secret when the values are
+      # blank, and the real secret is created once by hand in the cluster.
+      - name: Render manifest
+        uses: WyriHaximus/github-action-helm3@v3
+        with:
+          exec: |
+            if [ ! -d "organizzer/chart" ]; then
+              echo "::error::organizzer/chart not found"
+              exit 1
+            fi
+            mkdir -p manifest/organizzer
+            helm template organizzer organizzer/chart/ \
+              --set image.tag=${{ env.DEPLOY_SHA }} \
+              > manifest/organizzer/organizzer.yaml
+            cat manifest/organizzer/organizzer.yaml
+
+      - name: GIT commit and push all changed files
+        env:
+          CI_COMMIT_MESSAGE: "organizzer: deploy ${{ env.DEPLOY_SHA }}"
+          CI_COMMIT_AUTHOR: Continuous Integration
+        run: |
+          cd manifest
+          git config --global user.name "${{ env.CI_COMMIT_AUTHOR }}"
+          git config --global user.email "username@users.noreply.github.com"
+          git add organizzer/organizzer.yaml
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "${{ env.CI_COMMIT_MESSAGE }}"
+          git push

@@ -1,0 +1,121 @@
+# Nothing else lives in this namespace, so this chart owns it.
+namespace: organizzer
+
+image:
+  repository: ghcr.io/goodtribes-org/agent/organizzer
+  pullPolicy: IfNotPresent
+  # The tag is always the commit sha, set by CI — never "latest", because then
+  # nobody knows what is actually running.
+  tag: latest
+  # Empty renders no imagePullSecrets at all, which is what a public package
+  # wants. The package is made public by the build workflow. If you ever make
+  # it private again, add `organizzer` to the NAMESPACES array in
+  # argocd/create-pull-secrets.sh and put `- name: ghcr-pull-secret` here.
+  pullSecrets: []
+
+github:
+  org: goodtribes-org
+
+# One entry per project board. Each board gets its own set of stage
+# Deployments, so a stuck kickfix worker cannot hold up asylguiden.
+#
+# allowedRepos is deliberately a single repo per board. It is what
+# render.RejectUnknownRepo checks, so a card that somehow lands on the wrong
+# board is rejected with a comment instead of being planned against the wrong
+# codebase. Board 1 is the closed "GoodTribes Project" and is not listed.
+boards:
+  goodtribes:
+    projectNumber: 2
+    allowedRepos: goodtribes.org
+  kickfix:
+    projectNumber: 3
+    allowedRepos: kickfix
+  asylguiden:
+    projectNumber: 4
+    allowedRepos: asylguiden.se
+
+# Each entry becomes one Deployment per board, running `organizzer <name>`.
+# All are deliberately replicas: 1 — the card's status is the lock, and a
+# second replica in a stage would double-post and double-spend.
+#
+# Roll out in this order: request alone first, read the outlines it writes,
+# then plan. apply stays off until kube-foundry exists in this cluster and ops
+# has approved it — it is the only stage that spends money outside this
+# cluster, since each card it takes starts a sandbox pod running a coding
+# agent.
+stages:
+  request:
+    enabled: true
+    model: mistralai/Mistral-Small-3.2-24B-Instruct-2506
+  plan:
+    enabled: false
+    model: zai-org/GLM-5.2
+  apply:
+    enabled: false
+    model: ""
+
+llm:
+  baseURL: https://api.berget.ai/v1
+  # This has to cover the whole generation, not the time to first byte: berget
+  # does not stream, so nothing comes back — not even response headers — until
+  # the model has finished. A plan is budgeted 16000 tokens and GLM-5.2 was
+  # measured at ~21 tokens/second, so a plan that uses its budget needs well
+  # over 600s. 900 leaves headroom for a slower hour without hiding a genuine
+  # hang.
+  timeoutSeconds: 900
+  temperature: "0.1"
+  maxAttempts: 3
+  # Zero means "no cap", which is the binary's default but not the right one
+  # here: the kickfix board alone holds 94 cards, and an uncapped request stage
+  # would sweep the lot before anyone could read the first outline. Ten an hour
+  # keeps the queue moving while leaving room to stop it if the outlines are
+  # wrong. The cap is per stage and per process — it resets on a restart,
+  # because a transient failure should not spend the rest of the hour's budget.
+  maxIssuesPerHour: 10
+
+poll:
+  # Ten seconds between issues so a queue drains promptly; a full minute when
+  # there is nothing to do, because polling an idle board faster only spends
+  # rate limit. Three boards x three stages share one token's rate limit, so
+  # do not lower the idle interval without checking it.
+  busySeconds: 10
+  idleSeconds: 60
+
+foundry:
+  webhookURL: http://kube-foundry-webhook.kubefoundry.svc.cluster.local
+  webhookPath: /api/v1/tasks
+  agent: open-code
+  # Order matters: the operator appends each skill's env in list order and
+  # Kubernetes resolves duplicate names to the last one. Never list two berget
+  # model-override skills together.
+  skills: berget
+  # Must exist in the kubefoundry namespace, holding GITHUB_TOKEN and the
+  # berget key under ANTHROPIC_API_KEY. secretRef does not cross namespaces.
+  secretRef: factory-creds-goodtribes
+  branch: main
+  maxRetries: 1
+  gitAuthorName: organizzer
+  gitAuthorEmail: organizzer@goodtribes.org
+
+logLevel: info
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+# Left empty on purpose, and unlike the elino original these are NOT supplied
+# at deploy time with --set: rendering them would write the PAT in plaintext
+# into the GitOps repo. The chart renders no Secret when they are blank, and
+# organizzer-secret is created once by hand:
+#
+#   kubectl --kubeconfig ~/.kube/confighrb -n organizzer \
+#     create secret generic organizzer-secret \
+#     --from-literal=GITHUB_TOKEN=... --from-literal=BERGET_API_KEY=...
+#
+# It is safe from the ArgoCD app's prune because the app never renders it.
+secrets:
+  GITHUB_TOKEN: ""
+  BERGET_API_KEY: ""

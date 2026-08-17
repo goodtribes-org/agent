@@ -6,3 +6,6 @@ design/
 
 # Machine-specific Claude Code settings (absolute paths, personal permissions)
 .claude/settings.local.json
+
+# Claude Code runtime artifact — session id and pid of whoever ran last
+.claude/scheduled_tasks.lock

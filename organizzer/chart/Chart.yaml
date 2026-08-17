@@ -1,0 +1,6 @@
+apiVersion: v2
+name: organizzer
+description: Board workers that drive the Elino Mail Suite project board
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

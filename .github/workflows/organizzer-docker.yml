@@ -1,0 +1,82 @@
+name: Organizzer Docker Publish
+
+# The agent repo holds skills and markdown as well as this service, so the
+# path filter keeps a documentation commit from rebuilding and redeploying the
+# board workers.
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "organizzer/**"
+      - ".github/workflows/organizzer-docker.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "organizzer/**"
+      - ".github/workflows/organizzer-docker.yml"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: goodtribes-org/agent/organizzer
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: organizzer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          # The module has no dependencies, so there is no go.sum for the
+          # cache to key on and enabling it fails the step outright.
+          cache: false
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log into ${{ env.REGISTRY }}
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./organizzer
+          push: ${{ github.event_name != 'pull_request' }}
+          provenance: false
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Public so the cluster needs no pull secret in the organizzer namespace.
+      # Same step goodtribes.org's workflow uses for its frontend package.
+      - name: Make the package public
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api --method PATCH \
+            /orgs/goodtribes-org/packages/container/agent%2Forganizzer \
+            -f visibility=public || true

@@ -1,0 +1,106 @@
+{{- /*
+One Deployment per board per stage, all from the same image with a different
+command and a different PROJECT_NUMBER. The binary drives exactly one board, so
+watching three means running three sets of workers.
+
+Every one is replicas: 1 with strategy Recreate. The card's status is the lock:
+a stage reads one column, works one card, and moves it. A second replica would
+read the same column at the same moment and post the same comment twice — and
+for the apply stage that means two sandbox pods and two pull requests, because
+the webhook generates a fresh task name per submission and so cannot reject a
+duplicate. Recreate keeps that true through a rollout, where RollingUpdate
+would briefly run the old and new pods together.
+
+The board name is part of the selector as well as the name. Two Deployments
+sharing a selector would fight over each other's pods, and the stage label
+alone no longer distinguishes them once there is more than one board.
+*/ -}}
+{{- range $board, $bspec := .Values.boards }}
+{{- range $stage, $spec := $.Values.stages }}
+{{- if $spec.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: organizzer-{{ $board }}-{{ $stage }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    {{- include "organizzer.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $stage }}
+    organizzer.goodtribes.org/board: {{ $board }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "organizzer.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $stage }}
+      organizzer.goodtribes.org/board: {{ $board }}
+  template:
+    metadata:
+      labels:
+        {{- include "organizzer.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ $stage }}
+        organizzer.goodtribes.org/board: {{ $board }}
+    spec:
+      {{- with $.Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        # Without this the pod only satisfies "baseline", and a namespace that
+        # enforces the restricted profile rejects it outright rather than
+        # warning as this cluster does.
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: organizzer
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command: ["organizzer", {{ $stage | quote }}]
+          ports:
+            - name: health
+              containerPort: 8080
+          env:
+            {{- include "organizzer.env" $ | nindent 12 }}
+            - name: PROJECT_NUMBER
+              value: {{ $bspec.projectNumber | quote }}
+            - name: ALLOWED_REPOS
+              value: {{ $bspec.allowedRepos | quote }}
+            {{- if $spec.model }}
+            - name: MODEL_{{ $stage | upper }}
+              value: {{ $spec.model | quote }}
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: organizzer-secret
+          # There is no request traffic to serve, so readiness reports whether
+          # the poll loop is still turning. A stage wedged on something it
+          # cannot see stops ticking and shows up here rather than looking
+          # healthy while doing nothing.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+{{ toYaml $.Values.resources | indent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+{{- end }}
+{{- end }}
+{{- end }}
